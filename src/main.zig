@@ -1,8 +1,11 @@
 const std = @import("std");
 const stb = @import("zstbi");
 
-pub inline fn clampToU8(value: f32) u8 {
-    return @intFromFloat(255 * @max(0, @min(1, value)));
+const Color = @Vector(4, u8);
+
+pub inline fn clampToU8(dividend: anytype, divisor: anytype) u8 {
+    const d: f32 = @floatFromInt(dividend);
+    return @intFromFloat(255 * @max(0, @min(1, d / divisor)));
 }
 
 pub fn render() !void {
@@ -10,23 +13,18 @@ pub fn render() !void {
     const height = 768;
 
     var image = try stb.Image.createEmpty(width, height, 4, .{});
-    //image.deinit();
+
+    var colors: *[width * height]Color = @alignCast(@ptrCast(&image.data[0]));
+
+    colors[0] = Color{ 0xFF, 0x00, 0x00, 0xFF };
 
     for (0..height) |j| {
         for (0..width) |i| {
-            const r: f32 = @floatFromInt(j);
-            const g: f32 = @floatFromInt(i);
-
-            const p: usize = (i + j * width) * 4;
-
-            image.data[p + 0] = clampToU8(r / height);
-            image.data[p + 1] = clampToU8(g / width);
-            image.data[p + 2] = 0x00;
-            image.data[p + 3] = 0xFF;
+            colors[i + j * width] = Color{ clampToU8(j, height), clampToU8(i, width), 0x00, 0xFF };
         }
     }
 
-    try image.writeToFile("D:/Development/ray-tracing/src/main.png", stb.ImageWriteFormat.png);
+    try image.writeToFile("./src/main.png", stb.ImageWriteFormat.png);
 }
 
 pub fn main() !void {
