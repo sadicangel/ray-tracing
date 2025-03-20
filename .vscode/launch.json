@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Launch ray_tracing",
+            "program": "${workspaceFolder}/${input:executablePath}",
+            "preLaunchTask": "build-ray-tracing",
+            "cwd": "${workspaceFolder}"
+        }
+    ],
+    "inputs": [
+        {
+            "type": "pickString",
+            "id": "executablePath",
+            "description": "Select the executable to debug",
+            "options": [
+                "zig-out/bin/ray_tracing.exe"
+            ]
+        }
+    ]
+}
