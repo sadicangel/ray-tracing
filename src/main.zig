@@ -12,15 +12,18 @@ pub fn render() !void {
     var image = try stb.Image.createEmpty(width, height, 4, .{});
     //image.deinit();
 
-    var i: usize = 0;
-    while (i < image.data.len) : (i += 4) {
-        const w: f32 = @floatFromInt((i / 4) % width);
-        const h: f32 = @floatFromInt((i / 4) / height);
+    for (0..height) |j| {
+        for (0..width) |i| {
+            const r: f32 = @floatFromInt(j);
+            const g: f32 = @floatFromInt(i);
 
-        image.data[i + 0] = clampToU8(h / height);
-        image.data[i + 1] = clampToU8(w / width);
-        image.data[i + 2] = 0x00;
-        image.data[i + 3] = 0xFF;
+            const p: usize = (i + j * width) * 4;
+
+            image.data[p + 0] = clampToU8(r / height);
+            image.data[p + 1] = clampToU8(g / width);
+            image.data[p + 2] = 0x00;
+            image.data[p + 3] = 0xFF;
+        }
     }
 
     try image.writeToFile("D:/Development/ray-tracing/src/main.png", stb.ImageWriteFormat.png);
