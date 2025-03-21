@@ -4,8 +4,9 @@ const vec = @import("vec.zig");
 
 const BACKGROUND_COLOR = Color{ 51, 178, 204, 255 };
 
-const Color = @Vector(4, u8);
+const Vec2f = @Vector(2, f32);
 const Vec3f = @Vector(3, f32);
+const Color = @Vector(4, u8);
 
 const Geometry = union(enum) {
     Sphere: Sphere,
@@ -42,7 +43,9 @@ const Sphere = struct {
 };
 
 const Material = struct {
+    albedo: Vec2f,
     diffuseColor: Vec3f,
+    specularExponent: f32,
 };
 
 const Object = struct {
@@ -83,12 +86,14 @@ fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
     }
 
     var diffuseLightIntensity: f32 = 0.0;
+    var specularLightIntensity: f32 = 0.0;
     for (scene.lights.items) |light| {
         const lightDir: Vec3f = vec.normalize(light.position - hit);
         diffuseLightIntensity += light.intensity * @max(0.0, vec.dot(lightDir, norm));
+        specularLightIntensity += light.intensity * std.math.pow(f32, @max(0.0, vec.dot(-vec.reflect(-lightDir, norm), rayDirection)), object.material.specularExponent);
     }
 
-    const color = vec.scale(object.material.diffuseColor, diffuseLightIntensity);
+    const color = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]) + vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
     return vec.toColor(color, 255);
 }
 
@@ -122,8 +127,8 @@ pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
-    const ivory = Material{ .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 } };
-    const redRubber = Material{ .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 } };
+    const ivory = Material{ .albedo = Vec2f{ 0.6, 0.3 }, .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 }, .specularExponent = 50.0 };
+    const redRubber = Material{ .albedo = Vec2f{ 0.9, 0.1 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0 };
 
     const sphere1 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } },
@@ -146,6 +151,8 @@ pub fn main() !void {
     };
 
     const light1 = Light{ .position = Vec3f{ -20, 20, 20 }, .intensity = 1.5 };
+    const light2 = Light{ .position = Vec3f{ 30, 50, -25 }, .intensity = 1.8 };
+    const light3 = Light{ .position = Vec3f{ 30, 20, 30 }, .intensity = 1.7 };
 
     var scene = Scene{};
     try scene.objects.append(sphere1);
@@ -154,6 +161,8 @@ pub fn main() !void {
     try scene.objects.append(sphere4);
 
     try scene.lights.append(light1);
+    try scene.lights.append(light2);
+    try scene.lights.append(light3);
 
     try render(scene);
 }

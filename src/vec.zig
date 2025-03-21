@@ -27,3 +27,7 @@ pub inline fn toColor(vector: @Vector(3, f32), alpha: u8) @Vector(4, u8) {
     const clamped: @Vector(3, u8) = @intFromFloat(mul * @max(min, @min(max, vector)));
     return @Vector(4, u8){ clamped[0], clamped[1], clamped[2], alpha };
 }
+
+pub inline fn reflect(incident: @Vector(3, f32), normal: @Vector(3, f32)) @Vector(3, f32) {
+    return incident - scale(normal, 2.0 * dot(incident, normal));
+}
