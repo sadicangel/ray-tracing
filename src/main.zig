@@ -14,14 +14,16 @@ const Material = struct {
 const Object = struct {
     geometry: Geometry,
     material: Material,
-
-    fn intersect(self: Object, rayOrigin: Vec3f, rayDirection: Vec3f, distance: *f32) bool {
-        return self.geometry.intersect(rayOrigin, rayDirection, distance);
-    }
 };
 
 const Geometry = union(enum) {
     Sphere: Sphere,
+
+    fn center(self: Geometry) Vec3f {
+        switch (self) {
+            inline else => |impl| return impl.center,
+        }
+    }
 
     fn intersect(self: Geometry, rayOrigin: Vec3f, rayDirection: Vec3f, distance: *f32) bool {
         switch (self) {
@@ -48,15 +50,36 @@ const Sphere = struct {
     }
 };
 
-fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, object: Object) Color {
-    var distance = std.math.floatMax(f32);
-    if (!object.intersect(rayOrigin, rayDirection, &distance)) {
+const Scene = struct {
+    objects: std.ArrayList(Object) = std.ArrayList(Object).init(std.heap.page_allocator),
+
+    fn intersect(self: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, hit: *Vec3f, norm: *Vec3f, obj: *Object) bool {
+        var minDistance = std.math.floatMax(f32);
+        for (self.objects.items) |object| {
+            var objDistance: f32 = undefined;
+            if (object.geometry.intersect(rayOrigin, rayDirection, &objDistance) and objDistance < minDistance) {
+                minDistance = objDistance;
+                hit.* = rayOrigin + vec.scale(rayDirection, objDistance);
+                norm.* = vec.normalize(hit.* - object.geometry.center());
+                obj.* = object;
+                return true;
+            }
+        }
+        return minDistance < 1000;
+    }
+};
+
+fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
+    var hit: Vec3f = undefined;
+    var norm: Vec3f = undefined;
+    var object: Object = undefined;
+    if (!scene.intersect(rayOrigin, rayDirection, &hit, &norm, &object)) {
         return BACKGROUND_COLOR;
     }
     return vec.toColor(object.material.diffuseColor, 255);
 }
 
-fn render(object: Object) !void {
+fn render(scene: Scene) !void {
     const width = 1024;
     const height = 768;
     const fov: f32 = std.math.pi / 2.0;
@@ -73,7 +96,7 @@ fn render(object: Object) !void {
             const y: f32 = -(2 * (0.5 + jf) / height - 1) * @tan(fov / 2.0);
             const direction = vec.normalize(Vec3f{ x, y, -1 });
 
-            frameBuffer[i + j * width] = castRay(Vec3f{ 0, 0, 0 }, direction, object);
+            frameBuffer[i + j * width] = castRay(Vec3f{ 0, 0, 0 }, direction, scene);
         }
     }
 
@@ -86,10 +109,34 @@ pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
-    const geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } };
-    const material = Material{ .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 } };
+    const ivory = Material{ .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 } };
+    const redRubber = Material{ .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 } };
 
-    const object = Object{ .geometry = geometry, .material = material };
+    const sphere1 = Object{
+        .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } },
+        .material = ivory,
+    };
 
-    try render(object);
+    const sphere2 = Object{
+        .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -1.0, -1.5, -12 }, .radius = 2 } },
+        .material = redRubber,
+    };
+
+    const sphere3 = Object{
+        .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ 1.5, -0.5, -18 }, .radius = 3 } },
+        .material = redRubber,
+    };
+
+    const sphere4 = Object{
+        .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ 7, 5, -18 }, .radius = 4 } },
+        .material = ivory,
+    };
+
+    var scene = Scene{};
+    try scene.objects.append(sphere1);
+    try scene.objects.append(sphere2);
+    try scene.objects.append(sphere3);
+    try scene.objects.append(sphere4);
+
+    try render(scene);
 }

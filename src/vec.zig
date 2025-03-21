@@ -15,6 +15,11 @@ pub inline fn dot(self: @Vector(3, f32), other: @Vector(3, f32)) f32 {
     return self[0] * other[0] + self[1] * other[1] + self[2] * other[2];
 }
 
+pub inline fn scale(self: @Vector(3, f32), x: f32) @Vector(3, f32) {
+    const s: @Vector(3, f32) = @splat(x);
+    return self * s;
+}
+
 pub inline fn toColor(vector: @Vector(3, f32), alpha: u8) @Vector(4, u8) {
     const min: @Vector(3, f32) = @splat(0.0);
     const max: @Vector(3, f32) = @splat(1.0);
