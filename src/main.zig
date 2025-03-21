@@ -62,7 +62,6 @@ const Scene = struct {
                 hit.* = rayOrigin + vec.scale(rayDirection, objDistance);
                 norm.* = vec.normalize(hit.* - object.geometry.center());
                 obj.* = object;
-                return true;
             }
         }
         return minDistance < 1000;
