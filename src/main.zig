@@ -7,15 +7,6 @@ const BACKGROUND_COLOR = Color{ 51, 178, 204, 255 };
 const Color = @Vector(4, u8);
 const Vec3f = @Vector(3, f32);
 
-const Material = struct {
-    diffuseColor: Vec3f,
-};
-
-const Object = struct {
-    geometry: Geometry,
-    material: Material,
-};
-
 const Geometry = union(enum) {
     Sphere: Sphere,
 
@@ -50,8 +41,23 @@ const Sphere = struct {
     }
 };
 
+const Material = struct {
+    diffuseColor: Vec3f,
+};
+
+const Object = struct {
+    geometry: Geometry,
+    material: Material,
+};
+
+const Light = struct {
+    position: Vec3f,
+    intensity: f32,
+};
+
 const Scene = struct {
     objects: std.ArrayList(Object) = std.ArrayList(Object).init(std.heap.page_allocator),
+    lights: std.ArrayList(Light) = std.ArrayList(Light).init(std.heap.page_allocator),
 
     fn intersect(self: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, hit: *Vec3f, norm: *Vec3f, obj: *Object) bool {
         var minDistance = std.math.floatMax(f32);
@@ -75,7 +81,15 @@ fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
     if (!scene.intersect(rayOrigin, rayDirection, &hit, &norm, &object)) {
         return BACKGROUND_COLOR;
     }
-    return vec.toColor(object.material.diffuseColor, 255);
+
+    var diffuseLightIntensity: f32 = 0.0;
+    for (scene.lights.items) |light| {
+        const lightDir: Vec3f = vec.normalize(light.position - hit);
+        diffuseLightIntensity += light.intensity * @max(0.0, vec.dot(lightDir, norm));
+    }
+
+    const color = vec.scale(object.material.diffuseColor, diffuseLightIntensity);
+    return vec.toColor(color, 255);
 }
 
 fn render(scene: Scene) !void {
@@ -131,11 +145,15 @@ pub fn main() !void {
         .material = ivory,
     };
 
+    const light1 = Light{ .position = Vec3f{ -20, 20, 20 }, .intensity = 1.5 };
+
     var scene = Scene{};
     try scene.objects.append(sphere1);
     try scene.objects.append(sphere2);
     try scene.objects.append(sphere3);
     try scene.objects.append(sphere4);
+
+    try scene.lights.append(light1);
 
     try render(scene);
 }
