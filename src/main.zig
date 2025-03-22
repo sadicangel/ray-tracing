@@ -5,7 +5,7 @@ const vec = @import("vec.zig");
 const WINDOW_WIDTH = 1024;
 const WINDOW_HEIGHT = 768;
 const FOV: f32 = std.math.pi / 2.0;
-const MAX_DEPTH = 0;
+const MAX_DEPTH = 4;
 const BACKGROUND_COLOR = Vec3f{ 0.2, 0.7, 0.8 };
 
 const Vec3f = @Vector(3, f32);
