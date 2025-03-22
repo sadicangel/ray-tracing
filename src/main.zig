@@ -65,14 +65,14 @@ const Scene = struct {
     objects: std.ArrayList(Object) = std.ArrayList(Object).init(std.heap.page_allocator),
     lights: std.ArrayList(Light) = std.ArrayList(Light).init(std.heap.page_allocator),
 
-    fn intersect(self: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, hit: *Vec3f, norm: *Vec3f, obj: *Object) bool {
+    fn intersect(self: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, hit: *Vec3f, normal: *Vec3f, obj: *Object) bool {
         var minDistance = std.math.floatMax(f32);
         for (self.objects.items) |object| {
             var objDistance: f32 = undefined;
             if (object.geometry.intersect(rayOrigin, rayDirection, &objDistance) and objDistance < minDistance) {
                 minDistance = objDistance;
                 hit.* = rayOrigin + vec.scale(rayDirection, objDistance);
-                norm.* = vec.normalize(hit.* - object.geometry.center());
+                normal.* = vec.normalize(hit.* - object.geometry.center());
                 obj.* = object;
             }
         }
@@ -82,18 +82,31 @@ const Scene = struct {
 
 fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
     var hit: Vec3f = undefined;
-    var norm: Vec3f = undefined;
+    var normal: Vec3f = undefined;
     var object: Object = undefined;
-    if (!scene.intersect(rayOrigin, rayDirection, &hit, &norm, &object)) {
+    if (!scene.intersect(rayOrigin, rayDirection, &hit, &normal, &object)) {
         return BACKGROUND_COLOR;
     }
 
     var diffuseLightIntensity: f32 = 0.0;
     var specularLightIntensity: f32 = 0.0;
     for (scene.lights.items) |light| {
-        const lightDir: Vec3f = vec.normalize(light.position - hit);
-        diffuseLightIntensity += light.intensity * @max(0.0, vec.dot(lightDir, norm));
-        specularLightIntensity += light.intensity * std.math.pow(f32, @max(0.0, vec.dot(-vec.reflect(-lightDir, norm), rayDirection)), object.material.specularExponent);
+        const lightDirection = vec.normalize(light.position - hit);
+        const lightDistance = vec.length(light.position - hit);
+        const shadowOrigin = if (vec.dot(lightDirection, normal) < 0.0)
+            hit - vec.scale(normal, 1e-3)
+        else
+            hit + vec.scale(normal, 1e-3);
+
+        var shadowHit: Vec3f = undefined;
+        var shadowNormal: Vec3f = undefined;
+        var shadowObject: Object = undefined;
+        if (scene.intersect(shadowOrigin, lightDirection, &shadowHit, &shadowNormal, &shadowObject) and vec.length(shadowHit - shadowOrigin) < lightDistance) {
+            continue;
+        }
+
+        diffuseLightIntensity += light.intensity * @max(0.0, vec.dot(lightDirection, normal));
+        specularLightIntensity += light.intensity * std.math.pow(f32, @max(0.0, vec.dot(-vec.reflect(-lightDirection, normal), rayDirection)), object.material.specularExponent);
     }
 
     const color = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]) + vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
