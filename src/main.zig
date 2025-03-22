@@ -2,6 +2,9 @@ const std = @import("std");
 const stb = @import("zstbi");
 const vec = @import("vec.zig");
 
+const WINDOW_WIDTH = 1024;
+const WINDOW_HEIGHT = 768;
+const FOV: f32 = std.math.pi / 2.0;
 const BACKGROUND_COLOR = Color{ 51, 178, 204, 255 };
 
 const Vec2f = @Vector(2, f32);
@@ -97,24 +100,22 @@ fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
     return vec.toColor(color, 255);
 }
 
+inline fn getDirection(i: usize, j: usize) Vec3f {
+    const ij: f32 = @floatFromInt(i);
+    const jf: f32 = @floatFromInt(j);
+    const x: f32 = (2 * (0.5 + ij) / WINDOW_WIDTH - 1) * @tan(FOV / 2.0) * WINDOW_WIDTH / WINDOW_HEIGHT;
+    const y: f32 = -(2 * (0.5 + jf) / WINDOW_HEIGHT - 1) * @tan(FOV / 2.0);
+    return vec.normalize(Vec3f{ x, y, -1 });
+}
+
 fn render(scene: Scene) !void {
-    const width = 1024;
-    const height = 768;
-    const fov: f32 = std.math.pi / 2.0;
+    var image = try stb.Image.createEmpty(WINDOW_WIDTH, WINDOW_HEIGHT, 4, .{});
 
-    var image = try stb.Image.createEmpty(width, height, 4, .{});
+    var frameBuffer: *[WINDOW_WIDTH * WINDOW_HEIGHT]Color = @alignCast(@ptrCast(&image.data[0]));
 
-    var frameBuffer: *[width * height]Color = @alignCast(@ptrCast(&image.data[0]));
-
-    for (0..height) |j| {
-        for (0..width) |i| {
-            const ij: f32 = @floatFromInt(i);
-            const jf: f32 = @floatFromInt(j);
-            const x: f32 = (2 * (0.5 + ij) / width - 1) * @tan(fov / 2.0) * width / height;
-            const y: f32 = -(2 * (0.5 + jf) / height - 1) * @tan(fov / 2.0);
-            const direction = vec.normalize(Vec3f{ x, y, -1 });
-
-            frameBuffer[i + j * width] = castRay(Vec3f{ 0, 0, 0 }, direction, scene);
+    for (0..WINDOW_HEIGHT) |j| {
+        for (0..WINDOW_WIDTH) |i| {
+            frameBuffer[i + j * WINDOW_WIDTH] = castRay(Vec3f{ 0, 0, 0 }, getDirection(i, j), scene);
         }
     }
 
