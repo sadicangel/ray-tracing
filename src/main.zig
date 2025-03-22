@@ -9,6 +9,7 @@ const MAX_DEPTH = 4;
 const BACKGROUND_COLOR = Vec3f{ 0.2, 0.7, 0.8 };
 
 const Vec3f = @Vector(3, f32);
+const Vec4f = @Vector(4, f32);
 const Color = @Vector(4, u8);
 
 const Geometry = union(enum) {
@@ -46,9 +47,10 @@ const Sphere = struct {
 };
 
 const Material = struct {
-    albedo: Vec3f,
+    albedo: Vec4f,
     diffuseColor: Vec3f,
     specularExponent: f32,
+    refactiveIndex: f32,
 };
 
 const Object = struct {
@@ -89,11 +91,11 @@ fn castRay(scene: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, depth: usize) Ve
     }
 
     const reflectDirection: Vec3f = vec.normalize(vec.reflect(rayDirection, normal));
-    const reflectOrigin: Vec3f = if (vec.dot(reflectDirection, normal) < 0.0)
-        hit - vec.scale(normal, 1e-3)
-    else
-        hit + vec.scale(normal, 1e-3);
+    const reflectOrigin: Vec3f = if (vec.dot(reflectDirection, normal) < 0.0) hit - vec.scale(normal, 1e-3) else hit + vec.scale(normal, 1e-3);
     const reflectColor = castRay(scene, reflectOrigin, reflectDirection, depth + 1);
+    const refractDirection: Vec3f = vec.normalize(vec.refract(rayDirection, normal, object.material.refactiveIndex));
+    const refractOrigin: Vec3f = if (vec.dot(refractDirection, normal) < 0.0) hit - vec.scale(normal, 1e-3) else hit + vec.scale(normal, 1e-3);
+    const refractColor = castRay(scene, refractOrigin, refractDirection, depth + 1);
 
     var diffuseLightIntensity: f32 = 0.0;
     var specularLightIntensity: f32 = 0.0;
@@ -116,10 +118,11 @@ fn castRay(scene: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, depth: usize) Ve
         specularLightIntensity += light.intensity * std.math.pow(f32, @max(0.0, vec.dot(-vec.reflect(-lightDirection, normal), rayDirection)), object.material.specularExponent);
     }
 
-    const d = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]);
-    const s = vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
-    const r = vec.scale(reflectColor, object.material.albedo[2]);
-    return s + d + r;
+    const diff = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]);
+    const spec = vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
+    const refl = vec.scale(reflectColor, object.material.albedo[2]);
+    const refr = vec.scale(refractColor, object.material.albedo[3]);
+    return spec + diff + refl + refr;
 }
 
 inline fn getDirection(i: usize, j: usize) Vec3f {
@@ -155,9 +158,10 @@ pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
-    const ivory = Material{ .albedo = Vec3f{ 0.6, 0.3, 0.1 }, .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 }, .specularExponent = 50.0 };
-    const redRubber = Material{ .albedo = Vec3f{ 0.9, 0.1, 0.0 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0 };
-    const mirror = Material{ .albedo = Vec3f{ 0.0, 10.0, 0.8 }, .diffuseColor = Vec3f{ 1.0, 1.0, 1.0 }, .specularExponent = 1425.0 };
+    const ivory = Material{ .albedo = Vec4f{ 0.6, 0.3, 0.1, 0.0 }, .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 }, .specularExponent = 50.0, .refactiveIndex = 1.0 };
+    const glass = Material{ .albedo = Vec4f{ 0.0, 0.5, 0.1, 0.8 }, .diffuseColor = Vec3f{ 0.6, 0.7, 0.8 }, .specularExponent = 125.0, .refactiveIndex = 1.5 };
+    const redRubber = Material{ .albedo = Vec4f{ 0.9, 0.1, 0.0, 0.0 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0, .refactiveIndex = 1.0 };
+    const mirror = Material{ .albedo = Vec4f{ 0.0, 10.0, 0.8, 0.0 }, .diffuseColor = Vec3f{ 1.0, 1.0, 1.0 }, .specularExponent = 1425.0, .refactiveIndex = 1.0 };
 
     const sphere1 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } },
@@ -166,7 +170,7 @@ pub fn main() !void {
 
     const sphere2 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -1.0, -1.5, -12 }, .radius = 2 } },
-        .material = mirror,
+        .material = glass,
     };
 
     const sphere3 = Object{
