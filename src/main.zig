@@ -5,9 +5,9 @@ const vec = @import("vec.zig");
 const WINDOW_WIDTH = 1024;
 const WINDOW_HEIGHT = 768;
 const FOV: f32 = std.math.pi / 2.0;
-const BACKGROUND_COLOR = Color{ 51, 178, 204, 255 };
+const MAX_DEPTH = 0;
+const BACKGROUND_COLOR = Vec3f{ 0.2, 0.7, 0.8 };
 
-const Vec2f = @Vector(2, f32);
 const Vec3f = @Vector(3, f32);
 const Color = @Vector(4, u8);
 
@@ -46,7 +46,7 @@ const Sphere = struct {
 };
 
 const Material = struct {
-    albedo: Vec2f,
+    albedo: Vec3f,
     diffuseColor: Vec3f,
     specularExponent: f32,
 };
@@ -80,13 +80,20 @@ const Scene = struct {
     }
 };
 
-fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
+fn castRay(scene: Scene, rayOrigin: Vec3f, rayDirection: Vec3f, depth: usize) Vec3f {
     var hit: Vec3f = undefined;
     var normal: Vec3f = undefined;
     var object: Object = undefined;
-    if (!scene.intersect(rayOrigin, rayDirection, &hit, &normal, &object)) {
+    if (depth > MAX_DEPTH or !scene.intersect(rayOrigin, rayDirection, &hit, &normal, &object)) {
         return BACKGROUND_COLOR;
     }
+
+    const reflectDirection: Vec3f = vec.normalize(vec.reflect(rayDirection, normal));
+    const reflectOrigin: Vec3f = if (vec.dot(reflectDirection, normal) < 0.0)
+        hit - vec.scale(normal, 1e-3)
+    else
+        hit + vec.scale(normal, 1e-3);
+    const reflectColor = castRay(scene, reflectOrigin, reflectDirection, depth + 1);
 
     var diffuseLightIntensity: f32 = 0.0;
     var specularLightIntensity: f32 = 0.0;
@@ -109,8 +116,10 @@ fn castRay(rayOrigin: Vec3f, rayDirection: Vec3f, scene: Scene) Color {
         specularLightIntensity += light.intensity * std.math.pow(f32, @max(0.0, vec.dot(-vec.reflect(-lightDirection, normal), rayDirection)), object.material.specularExponent);
     }
 
-    const color = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]) + vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
-    return vec.toColor(color, 255);
+    const d = vec.scale(object.material.diffuseColor, diffuseLightIntensity * object.material.albedo[0]);
+    const s = vec.scale(Vec3f{ 1.0, 1.0, 1.0 }, specularLightIntensity * object.material.albedo[1]);
+    const r = vec.scale(reflectColor, object.material.albedo[2]);
+    return s + d + r;
 }
 
 inline fn getDirection(i: usize, j: usize) Vec3f {
@@ -128,7 +137,12 @@ fn render(scene: Scene) !void {
 
     for (0..WINDOW_HEIGHT) |j| {
         for (0..WINDOW_WIDTH) |i| {
-            frameBuffer[i + j * WINDOW_WIDTH] = castRay(Vec3f{ 0, 0, 0 }, getDirection(i, j), scene);
+            var color3f = castRay(scene, Vec3f{ 0, 0, 0 }, getDirection(i, j), 0);
+            const max: f32 = @max(color3f[0], color3f[1], color3f[2]);
+            if (max > 1) {
+                color3f = vec.scale(color3f, 1 / max);
+            }
+            frameBuffer[i + j * WINDOW_WIDTH] = vec.toColor(color3f, 255);
         }
     }
 
@@ -141,8 +155,9 @@ pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
-    const ivory = Material{ .albedo = Vec2f{ 0.6, 0.3 }, .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 }, .specularExponent = 50.0 };
-    const redRubber = Material{ .albedo = Vec2f{ 0.9, 0.1 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0 };
+    const ivory = Material{ .albedo = Vec3f{ 0.6, 0.3, 0.1 }, .diffuseColor = Vec3f{ 0.4, 0.4, 0.3 }, .specularExponent = 50.0 };
+    const redRubber = Material{ .albedo = Vec3f{ 0.9, 0.1, 0.0 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0 };
+    const mirror = Material{ .albedo = Vec3f{ 0.0, 10.0, 0.8 }, .diffuseColor = Vec3f{ 1.0, 1.0, 1.0 }, .specularExponent = 1425.0 };
 
     const sphere1 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } },
@@ -151,7 +166,7 @@ pub fn main() !void {
 
     const sphere2 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -1.0, -1.5, -12 }, .radius = 2 } },
-        .material = redRubber,
+        .material = mirror,
     };
 
     const sphere3 = Object{
@@ -161,7 +176,7 @@ pub fn main() !void {
 
     const sphere4 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ 7, 5, -18 }, .radius = 4 } },
-        .material = ivory,
+        .material = mirror,
     };
 
     const light1 = Light{ .position = Vec3f{ -20, 20, 20 }, .intensity = 1.5 };
