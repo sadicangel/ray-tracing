@@ -13,11 +13,12 @@ const Vec4f = @Vector(4, f32);
 const Color = @Vector(4, u8);
 
 const Geometry = union(enum) {
+    Plane: Plane,
     Sphere: Sphere,
 
-    fn center(self: Geometry) Vec3f {
+    fn normal(self: Geometry, point: Vec3f) Vec3f {
         switch (self) {
-            inline else => |impl| return impl.center,
+            inline else => |impl| return impl.normal(point),
         }
     }
 
@@ -32,6 +33,10 @@ const Sphere = struct {
     center: Vec3f,
     radius: f32,
 
+    fn normal(self: Sphere, point: Vec3f) Vec3f {
+        return vec.normalize(point - self.center);
+    }
+
     fn intersect(self: Sphere, rayOrigin: Vec3f, rayDirection: Vec3f, distance: *f32) bool {
         const L: Vec3f = self.center - rayOrigin;
         const tca: f32 = vec.dot(L, rayDirection);
@@ -43,6 +48,23 @@ const Sphere = struct {
         if (distance.* < 0.0) distance.* = t1;
         if (distance.* < 0.0) return false;
         return true;
+    }
+};
+
+const Plane = struct {
+    planeNormal: Vec3f,
+    planeOffset: f32,
+
+    fn normal(self: Plane, point: Vec3f) Vec3f {
+        _ = point;
+        return self.planeNormal;
+    }
+
+    fn intersect(self: Plane, rayOrigin: Vec3f, rayDirection: Vec3f, distance: *f32) bool {
+        const denom: f32 = vec.dot(self.planeNormal, rayDirection);
+        if (@abs(denom) < 1e-6) return false;
+        distance.* = -(vec.dot(self.planeNormal, rayOrigin) + self.planeOffset) / denom;
+        return distance.* >= 1e-4;
     }
 };
 
@@ -74,7 +96,7 @@ const Scene = struct {
             if (object.geometry.intersect(rayOrigin, rayDirection, &objDistance) and objDistance < minDistance) {
                 minDistance = objDistance;
                 hit.* = rayOrigin + vec.scale(rayDirection, objDistance);
-                normal.* = vec.normalize(hit.* - object.geometry.center());
+                normal.* = object.geometry.normal(hit.*);
                 obj.* = object;
             }
         }
@@ -162,6 +184,13 @@ pub fn main() !void {
     const glass = Material{ .albedo = Vec4f{ 0.0, 0.5, 0.1, 0.8 }, .diffuseColor = Vec3f{ 0.6, 0.7, 0.8 }, .specularExponent = 125.0, .refactiveIndex = 1.5 };
     const redRubber = Material{ .albedo = Vec4f{ 0.9, 0.1, 0.0, 0.0 }, .diffuseColor = Vec3f{ 0.3, 0.1, 0.1 }, .specularExponent = 10.0, .refactiveIndex = 1.0 };
     const mirror = Material{ .albedo = Vec4f{ 0.0, 10.0, 0.8, 0.0 }, .diffuseColor = Vec3f{ 1.0, 1.0, 1.0 }, .specularExponent = 1425.0, .refactiveIndex = 1.0 };
+    // brown carpet material
+    const carpet = Material{ .albedo = Vec4f{ 0.1, 0.025, 0.0, 0.0 }, .diffuseColor = Vec3f{ 0.5, 0.3, 0.1 }, .specularExponent = 0.0, .refactiveIndex = 0.0 };
+
+    const plane = Object{
+        .geometry = Geometry{ .Plane = Plane{ .planeNormal = .{ 0, 1, 0 }, .planeOffset = 4 } },
+        .material = carpet,
+    };
 
     const sphere1 = Object{
         .geometry = Geometry{ .Sphere = Sphere{ .center = Vec3f{ -3, 0, -16 }, .radius = 2 } },
@@ -188,6 +217,7 @@ pub fn main() !void {
     const light3 = Light{ .position = Vec3f{ 30, 20, 30 }, .intensity = 1.7 };
 
     var scene = Scene{};
+    try scene.objects.append(plane);
     try scene.objects.append(sphere1);
     try scene.objects.append(sphere2);
     try scene.objects.append(sphere3);
